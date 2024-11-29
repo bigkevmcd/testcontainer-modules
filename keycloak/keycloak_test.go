@@ -104,7 +104,7 @@ func TestKeycloak(t *testing.T) {
 		}
 		assert.Equal(t, want, users)
 
-		require.NoError(t, keycloakContainer.CreateUser(ctx, token, "testing"))
+		require.NoError(t, keycloakContainer.CreateUser(ctx, token, keycloak.CreateUserRequest{Username: "testing", Enabled: true}))
 
 		users, err = get[[]user](ctx, token, usersPath)
 		require.NoError(t, err)

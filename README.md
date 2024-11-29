@@ -14,7 +14,7 @@ import (
 	"github/bigkevmcd/testcontainer-modules/keycloak"
 )
 
-func TestKeycloakWithAdminCredentials(t *testing.T) {
+func TestKeycloak(t *testing.T) {
 	ctx := context.Background()
 
 	keycloakContainer, err := keycloak.Run(ctx,
@@ -28,7 +28,8 @@ func TestKeycloakWithAdminCredentials(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, token)
 
-	err := keycloakContainer.CreateUser(ctx, token, "testing-user")
+	err := keycloakContainer.CreateUser(ctx, token,
+		keycloak.CreateUserRequest{Username: "testing-user", Enabled: true})
 	require.NoError(t, err)
 }
 ```

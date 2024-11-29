@@ -28,6 +28,13 @@ type KeycloakContainer struct {
 	testcontainers.Container
 }
 
+// CreateUserRequest provides fields for creating users.
+type CreateUserRequest struct {
+	Username string `json:"username"`
+	Enabled  bool   `json:"enabled"`
+	// TODO: Extend the number of fields?
+}
+
 // Run creates an instance of the Keycloak container type.
 func Run(ctx context.Context, img string, opts ...testcontainers.ContainerCustomizer) (*KeycloakContainer, error) {
 	req := testcontainers.ContainerRequest{
@@ -151,7 +158,6 @@ func (k *KeycloakContainer) GetBearerToken(ctx context.Context, username, passwo
 func (k *KeycloakContainer) EndpointPath(ctx context.Context, path string) (string, error) {
 	apiEndpoint, err := k.Endpoint(ctx, "http")
 	if err != nil {
-		// TODO: Improve the error
 		return "", fmt.Errorf("getting the endpoint for %s: %s", path, err)
 	}
 
@@ -159,16 +165,9 @@ func (k *KeycloakContainer) EndpointPath(ctx context.Context, path string) (stri
 }
 
 // CreateUser creates an enabled user with the provided username.
-// TODO: Allow providing a user representation for this - CreateUserRequest?
 // TODO: What to do about realms?
-func (k *KeycloakContainer) CreateUser(ctx context.Context, token, username string) error {
-	type userRepresentation struct {
-		Username string `json:"username"`
-		Enabled  bool   `json:"enabled"`
-		// TODO: Extend the number of fields?
-	}
-
-	b, err := json.Marshal(userRepresentation{Username: username, Enabled: true})
+func (k *KeycloakContainer) CreateUser(ctx context.Context, token string, ur CreateUserRequest) error {
+	b, err := json.Marshal(ur)
 	if err != nil {
 		return fmt.Errorf("marshalling the user creation to JSON: %w", err)
 	}
