@@ -11,7 +11,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github/bigkevmcd/testcontainer-modules/keycloak"
+	"github.com/bigkevmcd/testcontainer-modules/keycloak"
 )
 
 func TestKeycloak(t *testing.T) {
