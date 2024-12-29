@@ -90,8 +90,10 @@ func TestKeycloak(t *testing.T) {
 	t.Run("creating a user", func(t *testing.T) {
 		ctx := context.Background()
 		type user struct {
-			Username string `json:"username"`
-			Enabled  bool   `json:"enabled"`
+			Username  string `json:"username"`
+			Enabled   bool   `json:"enabled"`
+			Firstname string `json:"firstName"`
+			Lastname  string `json:"lastName"`
 		}
 		usersPath, err := keycloakContainer.EndpointPath(ctx, "/admin/realms/master/users")
 		require.NoError(t, err)
@@ -104,14 +106,14 @@ func TestKeycloak(t *testing.T) {
 		}
 		assert.Equal(t, want, users)
 
-		require.NoError(t, keycloakContainer.CreateUser(ctx, token, keycloak.CreateUserRequest{Username: "testing", Enabled: true}))
+		require.NoError(t, keycloakContainer.CreateUser(ctx, token, keycloak.CreateUserRequest{Username: "testing", Enabled: false, Firstname: "Test", Lastname: "User"}))
 
 		users, err = get[[]user](ctx, token, usersPath)
 		require.NoError(t, err)
 
 		want = []user{
 			{Username: "administrator", Enabled: true},
-			{Username: "testing", Enabled: true},
+			{Username: "testing", Enabled: false, Firstname: "Test", Lastname: "User"},
 		}
 		// TODO: Is the return ordering guaranteed?
 		assert.Equal(t, want, users)
