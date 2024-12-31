@@ -94,10 +94,12 @@ func TestKeycloak(t *testing.T) {
 	t.Run("creating a user", func(t *testing.T) {
 		ctx := context.Background()
 		type user struct {
-			Username  string `json:"username"`
-			Enabled   bool   `json:"enabled"`
-			Firstname string `json:"firstName"`
-			Lastname  string `json:"lastName"`
+			Username      string `json:"username"`
+			Enabled       bool   `json:"enabled"`
+			Firstname     string `json:"firstName"`
+			Lastname      string `json:"lastName"`
+			Email         string `json:"email,omitempty"`
+			EmailVerified bool   `json:"emailVerified"`
 		}
 		usersPath, err := keycloakContainer.EndpointPath(ctx, "/admin/realms/master/users")
 		require.NoError(t, err)
@@ -110,14 +112,20 @@ func TestKeycloak(t *testing.T) {
 		}
 		assert.Equal(t, want, users)
 
-		require.NoError(t, keycloakContainer.CreateUser(ctx, token, keycloak.CreateUserRequest{Username: "testing", Enabled: false, Firstname: "Test", Lastname: "User"}))
+		require.NoError(t, keycloakContainer.CreateUser(ctx, token, keycloak.CreateUserRequest{
+			Username: "testing", Enabled: false, Firstname: "Test", Lastname: "User",
+			Email: "testing@example.com", EmailVerified: true,
+		}))
 
 		users, err = get[[]user](ctx, token, usersPath)
 		require.NoError(t, err)
 
 		want = []user{
 			{Username: "administrator", Enabled: true},
-			{Username: "testing", Enabled: false, Firstname: "Test", Lastname: "User"},
+			{
+				Username: "testing", Enabled: false, Firstname: "Test", Lastname: "User",
+				Email: "testing@example.com", EmailVerified: true,
+			},
 		}
 		// TODO: Is the return ordering guaranteed?
 		assert.Equal(t, want, users)

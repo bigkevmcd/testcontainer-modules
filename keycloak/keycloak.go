@@ -30,10 +30,12 @@ type KeycloakContainer struct {
 
 // CreateUserRequest provides fields for creating users.
 type CreateUserRequest struct {
-	Username  string `json:"username"`
-	Enabled   bool   `json:"enabled"`
-	Firstname string `json:"firstName"`
-	Lastname  string `json:"lastName"`
+	Username      string `json:"username"`
+	Enabled       bool   `json:"enabled"`
+	Firstname     string `json:"firstName,omitempty"`
+	Lastname      string `json:"lastName,omitempty"`
+	Email         string `json:"email,omitempty"`
+	EmailVerified bool   `json:"emailVerified"`
 	// TODO: Extend the number of fields?
 }
 
