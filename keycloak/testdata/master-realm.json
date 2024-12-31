@@ -447,7 +447,7 @@
     "firstName" : "User",
     "lastName" : "Two",
     "email" : "user2@example.com",
-    "emailVerified" : false,
+    "emailVerified" : true,
     "createdTimestamp" : 1732823969585,
     "enabled" : true,
     "totp" : false,

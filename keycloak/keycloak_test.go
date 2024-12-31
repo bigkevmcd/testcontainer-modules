@@ -57,8 +57,12 @@ func TestKeycloakWithImportRealm(t *testing.T) {
 	require.NoError(t, err)
 
 	type user struct {
-		Username string `json:"username"`
-		Enabled  bool   `json:"enabled"`
+		Username      string `json:"username"`
+		Enabled       bool   `json:"enabled"`
+		Firstname     string `json:"firstName"`
+		Lastname      string `json:"lastName"`
+		Email         string `json:"email,omitempty"`
+		EmailVerified bool   `json:"emailVerified"`
 	}
 	users, err := get[[]user](ctx, token, usersPath)
 	require.NoError(t, err)
@@ -67,8 +71,8 @@ func TestKeycloakWithImportRealm(t *testing.T) {
 	want := []user{
 		{Username: "admin", Enabled: true},
 		{Username: "administrator", Enabled: true},
-		{Username: "user1", Enabled: true},
-		{Username: "user2", Enabled: true},
+		{Username: "user1", Enabled: true, Email: "user1@example.com", Firstname: "User", Lastname: "One", EmailVerified: false},
+		{Username: "user2", Enabled: true, Email: "user2@example.com", Firstname: "User", Lastname: "Two", EmailVerified: true},
 	}
 	// TODO: Is the return ordering guaranteed?
 	assert.Equal(t, want, users)
