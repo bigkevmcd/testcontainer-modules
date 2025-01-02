@@ -90,16 +90,17 @@ func TestKeycloak(t *testing.T) {
 
 	token, err := keycloakContainer.GetBearerToken(ctx, "administrator", "secretpassword")
 	require.NoError(t, err)
+	require.NoError(t, keycloakContainer.EnableUnmanagedAttributes(ctx, token))
 
 	t.Run("creating a user", func(t *testing.T) {
-		ctx := context.Background()
 		type user struct {
-			Username      string `json:"username"`
-			Enabled       bool   `json:"enabled"`
-			Firstname     string `json:"firstName"`
-			Lastname      string `json:"lastName"`
-			Email         string `json:"email,omitempty"`
-			EmailVerified bool   `json:"emailVerified"`
+			Username      string              `json:"username"`
+			Enabled       bool                `json:"enabled"`
+			Firstname     string              `json:"firstName"`
+			Lastname      string              `json:"lastName"`
+			Email         string              `json:"email,omitempty"`
+			EmailVerified bool                `json:"emailVerified"`
+			Attributes    map[string][]string `json:"attributes"`
 		}
 		usersPath, err := keycloakContainer.EndpointPath(ctx, "/admin/realms/master/users")
 		require.NoError(t, err)
@@ -108,28 +109,68 @@ func TestKeycloak(t *testing.T) {
 		require.NoError(t, err)
 
 		want := []user{
-			{Username: "administrator", Enabled: true},
+			{
+				Username: "administrator", Enabled: true,
+				Attributes: map[string][]string{
+					"is_temporary_admin": {"true"},
+				},
+			},
 		}
 		assert.Equal(t, want, users)
 
 		require.NoError(t, keycloakContainer.CreateUser(ctx, token, keycloak.CreateUserRequest{
 			Username: "testing", Enabled: false, Firstname: "Test", Lastname: "User",
 			Email: "testing@example.com", EmailVerified: true,
+			Attributes: map[string][]string{
+				"testing": {"true"},
+				"test":    {"user"},
+			},
 		}))
 
 		users, err = get[[]user](ctx, token, usersPath)
 		require.NoError(t, err)
 
 		want = []user{
-			{Username: "administrator", Enabled: true},
+			{
+				Username: "administrator", Enabled: true,
+				Attributes: map[string][]string{
+					"is_temporary_admin": {"true"},
+				},
+			},
 			{
 				Username: "testing", Enabled: false, Firstname: "Test", Lastname: "User",
 				Email: "testing@example.com", EmailVerified: true,
+				Attributes: map[string][]string{
+					"testing": {"true"},
+					"test":    {"user"},
+				},
 			},
 		}
 		// TODO: Is the return ordering guaranteed?
 		assert.Equal(t, want, users)
 	})
+}
+
+func TestEnableUnmanagedAttributes(t *testing.T) {
+	ctx := context.Background()
+	keycloakContainer, err := keycloak.Run(ctx,
+		"quay.io/keycloak/keycloak:26.0.6-0",
+		keycloak.WithAdminCredentials("administrator", "secretpassword"),
+	)
+	testcontainers.CleanupContainer(t, keycloakContainer)
+	require.NoError(t, err)
+
+	token, err := keycloakContainer.GetBearerToken(ctx, "administrator", "secretpassword")
+	require.NoError(t, err)
+
+	require.NoError(t, keycloakContainer.EnableUnmanagedAttributes(ctx, token))
+
+	profilePath, err := keycloakContainer.EndpointPath(ctx, "/admin/realms/master/users/profile")
+	require.NoError(t, err)
+	profile, err := get[map[string]any](ctx, token, profilePath)
+	require.NoError(t, err)
+
+	require.Equal(t, "ENABLED", profile["unmanagedAttributePolicy"])
 }
 
 func get[T any](ctx context.Context, token, queryURL string) (T, error) {
@@ -153,10 +194,10 @@ func get[T any](ctx context.Context, token, queryURL string) (T, error) {
 	}
 
 	body, err := io.ReadAll(res.Body)
-	if err := res.Body.Close(); err != nil {
+	if err != nil {
 		return m, err
 	}
-	if err != nil {
+	if err := res.Body.Close(); err != nil {
 		return m, err
 	}
 

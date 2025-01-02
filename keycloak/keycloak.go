@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"path/filepath"
@@ -36,6 +37,8 @@ type CreateUserRequest struct {
 	Lastname      string `json:"lastName,omitempty"`
 	Email         string `json:"email,omitempty"`
 	EmailVerified bool   `json:"emailVerified"`
+
+	Attributes map[string][]string `json:"attributes,omitempty"`
 	// TODO: Extend the number of fields?
 }
 
@@ -195,6 +198,74 @@ func (k *KeycloakContainer) CreateUser(ctx context.Context, token string, ur Cre
 
 	if resp.StatusCode != http.StatusCreated {
 		return fmt.Errorf("invalid status code creating new user: %v", resp.StatusCode)
+	}
+
+	return nil
+}
+
+// EnableUnmanagedAttributes modifies the realm to allow unmanaged attributes.
+func (k *KeycloakContainer) EnableUnmanagedAttributes(ctx context.Context, token string) error {
+	endpoint, err := k.EndpointPath(ctx, "/admin/realms/master/users/profile")
+	if err != nil {
+		return fmt.Errorf("getting the path for the realm profile: %s", err)
+	}
+
+	req, err := http.NewRequest(http.MethodGet, endpoint, nil)
+	if err != nil {
+		return fmt.Errorf("creating HTTP request for managed attributes: %w", err)
+	}
+	req.Header.Add("Accept", "application/json")
+	req.Header.Add("Authorization", "Bearer "+token)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("getting realm profile: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("invalid status code getting realms profile: %v", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+	if err := resp.Body.Close(); err != nil {
+		return err
+	}
+
+	var parsed map[string]any
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		return err
+	}
+
+	parsed["unmanagedAttributePolicy"] = "ENABLED"
+
+	b, err := json.Marshal(parsed)
+	if err != nil {
+		// TODO: Improve error!
+		return err
+	}
+
+	req, err = http.NewRequest(http.MethodPut, endpoint, bytes.NewReader(b))
+	if err != nil {
+		return err
+	}
+	req.Header.Add("Content-Type", "application/json")
+	req.Header.Add("Authorization", "Bearer "+token)
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("updating realm profile: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		b, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return fmt.Errorf("failed to read body from invalid response %v: %w", resp.StatusCode, err)
+		}
+		defer resp.Body.Close()
+
+		return fmt.Errorf("invalid status code updating realms profile: %v %s", resp.StatusCode, b)
 	}
 
 	return nil
