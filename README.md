@@ -31,6 +31,9 @@ func TestKeycloak(t *testing.T) {
 	err := keycloakContainer.CreateUser(ctx, token,
 		keycloak.CreateUserRequest{Username: "testing-user", Enabled: true})
 	require.NoError(t, err)
+
+	// This allows the use of arbitrary attributes on created users.
+	require.NoError(t, keycloakContainer.EnableUnmanagedAttributes(ctx, token))
 }
 ```
 
