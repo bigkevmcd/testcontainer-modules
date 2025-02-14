@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -145,14 +147,17 @@ func (k *KeycloakContainer) GetBearerToken(ctx context.Context, username, passwo
 		// TODO: What if this returns an error?
 		resp.Body.Close()
 	}()
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("invalid response status: %v", resp.StatusCode)
+	b, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("reading response body: %w", err)
 	}
 
-	decoder := json.NewDecoder(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("invalid response status: %v: %s", resp.StatusCode, b)
+	}
+
 	result := map[string]any{}
-	err = decoder.Decode(&result)
+	err = json.Unmarshal(b, &result)
 	if err != nil {
 		return "", err
 	}
@@ -173,17 +178,70 @@ func (k *KeycloakContainer) EndpointPath(ctx context.Context, path string) (stri
 
 // CreateUser creates an enabled user with the provided username.
 // TODO: What to do about realms?
-func (k *KeycloakContainer) CreateUser(ctx context.Context, token string, ur CreateUserRequest) error {
+//
+// Returns the UUID of the created user.
+func (k *KeycloakContainer) CreateUser(ctx context.Context, token string, ur CreateUserRequest) (string, error) {
 	b, err := json.Marshal(ur)
 	if err != nil {
-		return fmt.Errorf("marshalling the user creation to JSON: %w", err)
+		return "", fmt.Errorf("marshalling the user creation to JSON: %w", err)
 	}
 
 	endpoint, err := k.EndpointPath(ctx, "/admin/realms/master/users")
 	if err != nil {
-		return fmt.Errorf("getting the path for the realm users: %s", err)
+		return "", fmt.Errorf("getting the path for the realm users: %s", err)
 	}
 	req, err := http.NewRequest(http.MethodPost, endpoint, bytes.NewReader(b))
+	if err != nil {
+		return "", fmt.Errorf("creating HTTP request for new user: %w", err)
+	}
+	req.Header.Add("Content-Type", "application/json")
+	req.Header.Add("Accept", "application/json")
+	req.Header.Add("Authorization", "Bearer "+token)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("creating new user: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusCreated {
+		return "", fmt.Errorf("invalid status code creating new user: %v", resp.StatusCode)
+	}
+	location := resp.Header.Get("Location")
+	parsedURL, err := url.Parse(location)
+	if err != nil {
+		return "", fmt.Errorf("invalid return location creating new user: %w", err)
+	}
+	// Returns the URL of the created Resource, the ID is the UUID of the
+	// created user.
+
+	return path.Base(parsedURL.Path), nil
+}
+
+// SetUserPassword sets a user password.
+// TODO: What to do about realms?
+// https://www.keycloak.org/docs-api/latest/rest-api/index.html#_put_adminrealmsrealmusersuser_idreset_password
+func (k *KeycloakContainer) SetUserPassword(ctx context.Context, token, userID, password string) error {
+	temporary := false
+	cr := CredentialRepresentation{
+		Type:      "password",
+		Temporary: &temporary,
+		Value:     password,
+	}
+
+	b, err := json.Marshal(cr)
+	if err != nil {
+		return fmt.Errorf("marshalling the credential representation to JSON: %w", err)
+	}
+
+	// TODO: improve the way these paths are calculated.
+	endpoint, err := k.EndpointPath(ctx, fmt.Sprintf("/admin/realms/master/users/%s/reset-password", userID))
+	if err != nil {
+		return fmt.Errorf("getting the path for the password reset: %s", err)
+	}
+
+	log.Printf("KEVIN!!!! %s", endpoint)
+
+	req, err := http.NewRequest(http.MethodPut, endpoint, bytes.NewReader(b))
 	if err != nil {
 		return fmt.Errorf("creating HTTP request for new user: %w", err)
 	}
@@ -196,8 +254,12 @@ func (k *KeycloakContainer) CreateUser(ctx context.Context, token string, ur Cre
 		return fmt.Errorf("creating new user: %w", err)
 	}
 
-	if resp.StatusCode != http.StatusCreated {
-		return fmt.Errorf("invalid status code creating new user: %v", resp.StatusCode)
+	if resp.StatusCode != http.StatusNoContent {
+		// TODO: what to do in the event of an error?!
+		b, _ := io.ReadAll(resp.Body)
+		defer resp.Body.Close()
+
+		return fmt.Errorf("invalid status code changing user password: %v: %s", resp.StatusCode, b)
 	}
 
 	return nil

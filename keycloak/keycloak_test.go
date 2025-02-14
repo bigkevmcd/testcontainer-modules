@@ -76,7 +76,6 @@ func TestKeycloakWithImportRealm(t *testing.T) {
 	}
 	// TODO: Is the return ordering guaranteed?
 	assert.Equal(t, want, users)
-
 }
 
 func TestKeycloak(t *testing.T) {
@@ -102,6 +101,7 @@ func TestKeycloak(t *testing.T) {
 			EmailVerified bool                `json:"emailVerified"`
 			Attributes    map[string][]string `json:"attributes"`
 		}
+
 		usersPath, err := keycloakContainer.EndpointPath(ctx, "/admin/realms/master/users")
 		require.NoError(t, err)
 
@@ -118,14 +118,15 @@ func TestKeycloak(t *testing.T) {
 		}
 		assert.Equal(t, want, users)
 
-		require.NoError(t, keycloakContainer.CreateUser(ctx, token, keycloak.CreateUserRequest{
+		_, err = keycloakContainer.CreateUser(ctx, token, keycloak.CreateUserRequest{
 			Username: "testing", Enabled: false, Firstname: "Test", Lastname: "User",
 			Email: "testing@example.com", EmailVerified: true,
 			Attributes: map[string][]string{
 				"testing": {"true"},
 				"test":    {"user"},
 			},
-		}))
+		})
+		require.NoError(t, err)
 
 		users, err = get[[]user](ctx, token, usersPath)
 		require.NoError(t, err)
@@ -148,6 +149,19 @@ func TestKeycloak(t *testing.T) {
 		}
 		// TODO: Is the return ordering guaranteed?
 		assert.Equal(t, want, users)
+	})
+
+	t.Run("setting a user password", func(t *testing.T) {
+		userID, err := keycloakContainer.CreateUser(ctx, token, keycloak.CreateUserRequest{
+			Username: "pwuser", Enabled: true, Firstname: "PW", Lastname: "User",
+			Email: "pwuser@example.com", EmailVerified: false,
+		})
+		require.NoError(t, err)
+
+		require.NoError(t, keycloakContainer.SetUserPassword(ctx, token, userID, "test-password"))
+
+		_, err = keycloakContainer.GetBearerToken(ctx, "pwuser", "test-password")
+		require.NoError(t, err)
 	})
 }
 
