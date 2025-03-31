@@ -13,7 +13,7 @@ func ExampleRun() {
 	ctx := context.Background()
 
 	keycloakContainer, err := keycloak.Run(ctx,
-		"quay.io/keycloak/keycloak:26.0.6-0",
+		testImage,
 	)
 	defer func() {
 		if err := testcontainers.TerminateContainer(keycloakContainer); err != nil {
