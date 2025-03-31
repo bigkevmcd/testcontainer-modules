@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -16,11 +17,19 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 )
 
+var testImage = func() string {
+	if v := os.Getenv("KEYCLOAK_IMAGE"); v != "" {
+		return v
+	}
+
+	return "quay.io/keycloak/keycloak:26.0.8-1"
+}()
+
 func TestKeycloakWithAdminCredentials(t *testing.T) {
 	ctx := context.Background()
 
 	keycloakContainer, err := keycloak.Run(ctx,
-		"quay.io/keycloak/keycloak:26.0.6-0",
+		testImage,
 		keycloak.WithAdminCredentials("administrator", "secretpassword"),
 	)
 	testcontainers.CleanupContainer(t, keycloakContainer)
@@ -43,7 +52,7 @@ func TestKeycloakWithImportRealm(t *testing.T) {
 	require.NoError(t, err)
 
 	keycloakContainer, err := keycloak.Run(ctx,
-		"quay.io/keycloak/keycloak:26.0.6-0",
+		testImage,
 		keycloak.WithAdminCredentials("administrator", "secretpassword"),
 		keycloak.WithImportRealm(absPath),
 	)
@@ -81,7 +90,7 @@ func TestKeycloakWithImportRealm(t *testing.T) {
 func TestKeycloak(t *testing.T) {
 	ctx := context.Background()
 	keycloakContainer, err := keycloak.Run(ctx,
-		"quay.io/keycloak/keycloak:26.0.6-0",
+		testImage,
 		keycloak.WithAdminCredentials("administrator", "secretpassword"),
 	)
 	testcontainers.CleanupContainer(t, keycloakContainer)
@@ -168,7 +177,7 @@ func TestKeycloak(t *testing.T) {
 func TestEnableUnmanagedAttributes(t *testing.T) {
 	ctx := context.Background()
 	keycloakContainer, err := keycloak.Run(ctx,
-		"quay.io/keycloak/keycloak:26.0.6-0",
+		testImage,
 		keycloak.WithAdminCredentials("administrator", "secretpassword"),
 	)
 	testcontainers.CleanupContainer(t, keycloakContainer)
