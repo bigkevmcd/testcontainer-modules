@@ -3,17 +3,17 @@ package keycloak_test
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"testing"
 
+	"github.com/Nerzal/gocloak/v13"
+	"github.com/bigkevmcd/testcontainer-modules/keycloak"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/bigkevmcd/testcontainer-modules/keycloak"
 	"github.com/testcontainers/testcontainers-go"
 )
 
@@ -36,7 +36,7 @@ func TestKeycloakWithAdminCredentials(t *testing.T) {
 	require.NoError(t, err)
 
 	token, err := keycloakContainer.GetBearerToken(ctx, "administrator", "notpassword")
-	assert.ErrorContains(t, err, "invalid response status: 401")
+	assert.ErrorContains(t, err, "getting bearer token: invalid_grant")
 	assert.Empty(t, token)
 
 	token, err = keycloakContainer.GetBearerToken(ctx, "administrator", "secretpassword")
@@ -93,7 +93,7 @@ func TestKeycloak(t *testing.T) {
 		testImage,
 		keycloak.WithAdminCredentials("administrator", "secretpassword"),
 	)
-	testcontainers.CleanupContainer(t, keycloakContainer)
+	// testcontainers.CleanupContainer(t, keycloakContainer)
 	require.NoError(t, err)
 
 	token, err := keycloakContainer.GetBearerToken(ctx, "administrator", "secretpassword")
@@ -172,6 +172,112 @@ func TestKeycloak(t *testing.T) {
 		_, err = keycloakContainer.GetBearerToken(ctx, "pwuser", "test-password")
 		require.NoError(t, err)
 	})
+
+	t.Run("creating a client", func(t *testing.T) {
+		type client struct {
+			ID       string `json:"id"`
+			ClientID string `json:"clientId"`
+			Name     string `json:"name"`
+		}
+
+		clientsPath, err := keycloakContainer.EndpointPath(ctx, "/admin/realms/master/clients")
+		require.NoError(t, err)
+
+		clients, err := get[[]client](ctx, token, clientsPath)
+		require.NoError(t, err)
+
+		clientIDs := func() []string {
+			var ids []string
+			for _, client := range clients {
+				ids = append(ids, client.ClientID)
+			}
+			return ids
+		}()
+		want := []string{
+			"account",
+			"account-console",
+			"admin-cli",
+			"broker",
+			"master-realm",
+			"security-admin-console",
+		}
+		assert.Equal(t, want, clientIDs)
+
+		_, err = keycloakContainer.CreateClient(ctx, token, keycloak.CreateClientRequest{
+			ClientID: "test-client",
+			Enabled:  true,
+			Secret:   "test-secret",
+		})
+		require.NoError(t, err)
+
+		clients, err = get[[]client](ctx, token, clientsPath)
+		require.NoError(t, err)
+
+		clientIDs = func() []string {
+			var ids []string
+			for _, client := range clients {
+				ids = append(ids, client.ClientID)
+			}
+			sort.Strings(ids)
+
+			return ids
+		}()
+		want = []string{
+			"account",
+			"account-console",
+			"admin-cli",
+			"broker",
+			"master-realm",
+			"security-admin-console",
+			"test-client",
+		}
+		assert.Equal(t, want, clientIDs)
+	})
+
+	t.Run("generating a new secret for the client", func(t *testing.T) {
+		clientID, err := keycloakContainer.CreateClient(ctx, token, keycloak.CreateClientRequest{
+			ClientID:               "new-client",
+			Enabled:                true,
+			PublicClient:           false,
+			ServiceAccountsEnabled: true,
+		})
+		require.NoError(t, err)
+
+		secret, err := keycloakContainer.GenerateClientSecret(ctx, token, clientID)
+		require.NoError(t, err)
+		assert.NotEmpty(t, secret)
+
+		keycloakEndpoint, err := keycloakContainer.Endpoint(ctx, "http")
+		require.NoError(t, err)
+		gc := gocloak.NewClient(keycloakEndpoint)
+
+		// session, err := gocloaksession.NewSession("new-client", secret, "master", keycloakEndpoint)
+		// require.NoError(t, err)
+		// clientToken, err := session.GetKeycloakAuthToken()
+		// require.NoError(t, err)
+
+		// gc := session.GetGoCloakInstance()
+
+		realms, err := gc.GetRealms(ctx, token)
+		require.NoError(t, err)
+
+		realmNames := func() []string {
+			var result []string
+			for _, realm := range realms {
+				result = append(result, *realm.Realm)
+			}
+
+			return result
+		}()
+		require.Equal(t, []string{"master"}, realmNames)
+
+		// realmsPath, err := keycloakContainer.EndpointPath(ctx, "/admin/realms")
+		// require.NoError(t, err)
+		// realms, err := get[[]map[string]any](ctx, token.AccessToken, realmsPath)
+		// require.NoError(t, err)
+
+		// require.Equal(t, []any{}, realms)
+	})
 }
 
 func TestEnableUnmanagedAttributes(t *testing.T) {
@@ -213,7 +319,7 @@ func get[T any](ctx context.Context, token, queryURL string) (T, error) {
 	}
 
 	if res.StatusCode != http.StatusOK {
-		return m, fmt.Errorf("invalid status code: %v", res.StatusCode)
+		return m, keycloak.ReadKeycloakError(res)
 	}
 
 	body, err := io.ReadAll(res.Body)

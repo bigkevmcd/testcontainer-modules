@@ -43,6 +43,22 @@ type CreateUserRequest struct {
 	// TODO: Extend the number of fields?
 }
 
+// CreateClientRequest provides fields for creating users.
+type CreateClientRequest struct {
+	ClientID               string   `json:"clientId"`
+	Name                   string   `json:"name,omitempty"`
+	Description            string   `json:"description,omitempty"`
+	Type                   string   `json:"type,omitempty"`
+	Enabled                bool     `json:"enabled"`
+	Secret                 string   `json:"secret,omitempty"`
+	PublicClient           bool     `json:"publicClient"`
+	ServiceAccountsEnabled bool     `json:"serviceAccountsEnabled"`
+	DefaultRoles           []string `json:"defaultRoles,omitempty"`
+
+	Attributes map[string][]string `json:"attributes,omitempty"`
+	// TODO: Extend the number of fields?
+}
+
 // Run creates an instance of the Keycloak container type.
 func Run(ctx context.Context, img string, opts ...testcontainers.ContainerCustomizer) (*KeycloakContainer, error) {
 	req := testcontainers.ContainerRequest{
@@ -142,22 +158,14 @@ func (k *KeycloakContainer) GetBearerToken(ctx context.Context, username, passwo
 		return "", err
 	}
 
-	defer func() {
-		// TODO: What if this returns an error?
-		resp.Body.Close()
-	}()
-	b, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("reading response body: %w", err)
-	}
-
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("invalid response status: %v: %s", resp.StatusCode, b)
+		return "", fmt.Errorf("getting bearer token: %s", ReadKeycloakError(resp))
 	}
 
-	result := map[string]any{}
-	err = json.Unmarshal(b, &result)
-	if err != nil {
+	decoder := json.NewDecoder(resp.Body)
+	defer resp.Body.Close()
+	var result map[string]any
+	if err := decoder.Decode(&result); err != nil {
 		return "", err
 	}
 
@@ -203,7 +211,7 @@ func (k *KeycloakContainer) CreateUser(ctx context.Context, token string, ur Cre
 	}
 
 	if resp.StatusCode != http.StatusCreated {
-		return "", fmt.Errorf("invalid status code creating new user: %v", resp.StatusCode)
+		return "", fmt.Errorf("creating new user: %s", ReadKeycloakError(resp))
 	}
 	location := resp.Header.Get("Location")
 	parsedURL, err := url.Parse(location)
@@ -252,11 +260,7 @@ func (k *KeycloakContainer) SetUserPassword(ctx context.Context, token, userID, 
 	}
 
 	if resp.StatusCode != http.StatusNoContent {
-		// TODO: what to do in the event of an error?!
-		b, _ := io.ReadAll(resp.Body)
-		defer resp.Body.Close()
-
-		return fmt.Errorf("invalid status code changing user password: %v: %s", resp.StatusCode, b)
+		return fmt.Errorf("changing user password: %s", ReadKeycloakError(resp))
 	}
 
 	return nil
@@ -282,7 +286,7 @@ func (k *KeycloakContainer) EnableUnmanagedAttributes(ctx context.Context, token
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("invalid status code getting realms profile: %v", resp.StatusCode)
+		return fmt.Errorf("enabling unmanaged attributes: %s", ReadKeycloakError(resp))
 	}
 
 	body, err := io.ReadAll(resp.Body)
@@ -318,14 +322,113 @@ func (k *KeycloakContainer) EnableUnmanagedAttributes(ctx context.Context, token
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		b, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return fmt.Errorf("failed to read body from invalid response %v: %w", resp.StatusCode, err)
-		}
-		defer resp.Body.Close()
-
-		return fmt.Errorf("invalid status code updating realms profile: %v %s", resp.StatusCode, b)
+		return fmt.Errorf("updating realms profile: %s", ReadKeycloakError(resp))
 	}
 
 	return nil
+}
+
+// CreateClient creates an OIDC client.
+//
+// https://www.keycloak.org/docs-api/latest/rest-api/index.html#_post_adminrealmsrealmclients
+//
+// Returns the UUID of the created client.
+func (k *KeycloakContainer) CreateClient(ctx context.Context, token string, cr CreateClientRequest) (string, error) {
+	b, err := json.Marshal(cr)
+	if err != nil {
+		return "", fmt.Errorf("marshalling the client creation to JSON: %w", err)
+	}
+
+	endpoint, err := k.EndpointPath(ctx, "/admin/realms/master/clients")
+	if err != nil {
+		return "", fmt.Errorf("getting the path for the realm clients: %s", err)
+	}
+	req, err := http.NewRequest(http.MethodPost, endpoint, bytes.NewReader(b))
+	if err != nil {
+		return "", fmt.Errorf("creating HTTP request for new client: %w", err)
+	}
+	req.Header.Add("Content-Type", "application/json")
+	req.Header.Add("Accept", "application/json")
+	req.Header.Add("Authorization", "Bearer "+token)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("creating new client: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusCreated {
+		return "", fmt.Errorf("creating a client: %s", ReadKeycloakError(resp))
+	}
+	location := resp.Header.Get("Location")
+	parsedURL, err := url.Parse(location)
+	if err != nil {
+		return "", fmt.Errorf("invalid return location creating new client: %w", err)
+	}
+	// Returns the URL of the created Resource, the ID is the UUID of the
+	// created client.
+
+	return path.Base(parsedURL.Path), nil
+}
+
+// GenerateClientSecret
+// TODO: What to do about realms?
+// https://www.keycloak.org/docs-api/latest/rest-api/index.html#_post_adminrealmsrealmclientsclient_uuidclient_secret
+func (k *KeycloakContainer) GenerateClientSecret(ctx context.Context, token, clientID string) (string, error) {
+	endpoint, err := k.EndpointPath(ctx, fmt.Sprintf("/admin/realms/master/clients/%s/client-secret", clientID))
+	if err != nil {
+		return "", fmt.Errorf("getting the path for the generating the client secret: %s", err)
+	}
+
+	req, err := http.NewRequest(http.MethodPost, endpoint, nil)
+	if err != nil {
+		return "", fmt.Errorf("creating HTTP request for generating client secret: %s", err)
+	}
+	req.Header.Add("Content-Type", "application/json")
+	req.Header.Add("Accept", "application/json")
+	req.Header.Add("Authorization", "Bearer "+token)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("generating client secret: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("invalid status code generating client secret: %s", ReadKeycloakError(resp))
+	}
+
+	var credentials CredentialRepresentation
+	decoder := json.NewDecoder(resp.Body)
+
+	if err := decoder.Decode(&credentials); err != nil {
+		return "", fmt.Errorf("parsing the response from generating client secret: %s", err)
+	}
+
+	return credentials.Value, nil
+}
+
+type keycloakError struct {
+	Response   map[string]any
+	StatusCode int
+}
+
+func (e keycloakError) Error() string {
+	if msg, ok := e.Response["error"]; ok {
+		return msg.(string)
+	}
+
+	return fmt.Sprintf("unknown error: %v", e.StatusCode)
+}
+
+// ReadKeycloakError parses an HTTP Response and returns an error with the
+// message from Keycloak.
+func ReadKeycloakError(resp *http.Response) error {
+	defer resp.Body.Close()
+	var response map[string]any
+	decoder := json.NewDecoder(resp.Body)
+
+	if err := decoder.Decode(&response); err != nil {
+		return err
+	}
+
+	return keycloakError{Response: response, StatusCode: resp.StatusCode}
 }
