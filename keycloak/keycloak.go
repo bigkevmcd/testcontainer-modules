@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"path"
@@ -238,8 +237,6 @@ func (k *KeycloakContainer) SetUserPassword(ctx context.Context, token, userID, 
 	if err != nil {
 		return fmt.Errorf("getting the path for the password reset: %s", err)
 	}
-
-	log.Printf("KEVIN!!!! %s", endpoint)
 
 	req, err := http.NewRequest(http.MethodPut, endpoint, bytes.NewReader(b))
 	if err != nil {
