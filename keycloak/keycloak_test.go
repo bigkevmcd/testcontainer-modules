@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -36,7 +37,7 @@ func TestKeycloakWithAdminCredentials(t *testing.T) {
 	require.NoError(t, err)
 
 	token, err := keycloakContainer.GetBearerToken(ctx, "administrator", "notpassword")
-	assert.ErrorContains(t, err, "invalid response status: 401")
+	assert.ErrorContains(t, err, "getting bearer token: invalid_grant")
 	assert.Empty(t, token)
 
 	token, err = keycloakContainer.GetBearerToken(ctx, "administrator", "secretpassword")
@@ -173,7 +174,7 @@ func TestKeycloak(t *testing.T) {
 		require.NoError(t, err)
 	})
 
-	t.Run("creating an client", func(t *testing.T) {
+	t.Run("creating a client", func(t *testing.T) {
 		type client struct {
 			ID       string `json:"id"`
 			ClientID string `json:"clientId"`
@@ -204,19 +205,12 @@ func TestKeycloak(t *testing.T) {
 		assert.Equal(t, want, clientIDs)
 
 		_, err = keycloakContainer.CreateClient(ctx, token, keycloak.CreateClientRequest{
-			ClientID:                  "test-client",
-			Enabled:                   true,
-			Secret:                    "test-secret",
-			DirectAccessGrantsEnabled: true,
-			PublicClient:              true,
+			ClientID:     "test-client",
+			Enabled:      true,
+			Secret:       "test-secret",
+			PublicClient: false,
 		})
 		require.NoError(t, err)
-
-		logs, err := keycloakContainer.Logs(ctx)
-		require.NoError(t, err)
-		bytes, err := io.ReadAll(logs)
-		require.NoError(t, err)
-		assert.Equal(t, "", string(bytes))
 
 		clients, err = get[[]client](ctx, token, clientsPath)
 		require.NoError(t, err)
@@ -226,6 +220,8 @@ func TestKeycloak(t *testing.T) {
 			for _, client := range clients {
 				ids = append(ids, client.ClientID)
 			}
+			sort.Strings(ids)
+
 			return ids
 		}()
 		want = []string{
@@ -234,13 +230,25 @@ func TestKeycloak(t *testing.T) {
 			"admin-cli",
 			"broker",
 			"master-realm",
-			"test-client",
 			"security-admin-console",
+			"test-client",
 		}
 		assert.Equal(t, want, clientIDs)
-
 	})
 
+	t.Run("generating a new secret for the client", func(t *testing.T) {
+		clientID, err := keycloakContainer.CreateClient(ctx, token, keycloak.CreateClientRequest{
+			ClientID:     "test-client",
+			Enabled:      true,
+			Secret:       "test-secret",
+			PublicClient: false,
+		})
+		require.NoError(t, err)
+
+		secret, err := keycloakContainer.GenerateClientSecret(ctx, token, clientID)
+		require.NoError(t, err)
+		require.Equal(t, "testing", secret)
+	})
 }
 
 func TestEnableUnmanagedAttributes(t *testing.T) {

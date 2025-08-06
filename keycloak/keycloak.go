@@ -45,14 +45,14 @@ type CreateUserRequest struct {
 
 // CreateClientRequest provides fields for creating users.
 type CreateClientRequest struct {
-	ClientID                  string `json:"clientId"`
-	Name                      string `json:"name,omitempty"`
-	Description               string `json:"description,omitempty"`
-	Type                      string `json:"type,omitempty"`
-	Enabled                   bool   `json:"enabled"`
-	Secret                    string `json:"secret,omitempty"`
-	DirectAccessGrantsEnabled bool   `json:"directGrantsAccessEnabled"`
-	PublicClient              bool   `json:"publicClient"`
+	ClientID              string `json:"clientId"`
+	Name                  string `json:"name,omitempty"`
+	Description           string `json:"description,omitempty"`
+	Type                  string `json:"type,omitempty"`
+	Enabled               bool   `json:"enabled"`
+	Secret                string `json:"secret,omitempty"`
+	PublicClient          bool   `json:"publicClient"`
+	ServiceAccountEnabled bool   `json:serviceAccountsEnabled"`
 
 	Attributes map[string][]string `json:"attributes,omitempty"`
 	// TODO: Extend the number of fields?
@@ -157,22 +157,14 @@ func (k *KeycloakContainer) GetBearerToken(ctx context.Context, username, passwo
 		return "", err
 	}
 
-	defer func() {
-		// TODO: What if this returns an error?
-		resp.Body.Close()
-	}()
-	b, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("reading response body: %w", err)
-	}
-
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("invalid response status: %v: %s", resp.StatusCode, b)
+		return "", fmt.Errorf("getting bearer token: %s", readKeycloakError(resp))
 	}
 
-	result := map[string]any{}
-	err = json.Unmarshal(b, &result)
-	if err != nil {
+	decoder := json.NewDecoder(resp.Body)
+	defer resp.Body.Close()
+	var result map[string]any
+	if err := decoder.Decode(&result); err != nil {
 		return "", err
 	}
 
@@ -218,7 +210,7 @@ func (k *KeycloakContainer) CreateUser(ctx context.Context, token string, ur Cre
 	}
 
 	if resp.StatusCode != http.StatusCreated {
-		return "", fmt.Errorf("invalid status code creating new user: %v", resp.StatusCode)
+		return "", fmt.Errorf("creating new user: %s", readKeycloakError(resp))
 	}
 	location := resp.Header.Get("Location")
 	parsedURL, err := url.Parse(location)
@@ -267,11 +259,7 @@ func (k *KeycloakContainer) SetUserPassword(ctx context.Context, token, userID, 
 	}
 
 	if resp.StatusCode != http.StatusNoContent {
-		// TODO: what to do in the event of an error?!
-		b, _ := io.ReadAll(resp.Body)
-		defer resp.Body.Close()
-
-		return fmt.Errorf("invalid status code changing user password: %v: %s", resp.StatusCode, b)
+		return fmt.Errorf("changing user password: %s", readKeycloakError(resp))
 	}
 
 	return nil
@@ -297,7 +285,7 @@ func (k *KeycloakContainer) EnableUnmanagedAttributes(ctx context.Context, token
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("invalid status code getting realms profile: %v", resp.StatusCode)
+		return fmt.Errorf("enabling unmanaged attributes: %s", readKeycloakError(resp))
 	}
 
 	body, err := io.ReadAll(resp.Body)
@@ -333,13 +321,7 @@ func (k *KeycloakContainer) EnableUnmanagedAttributes(ctx context.Context, token
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		b, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return fmt.Errorf("failed to read body from invalid response %v: %w", resp.StatusCode, err)
-		}
-		defer resp.Body.Close()
-
-		return fmt.Errorf("invalid status code updating realms profile: %v %s", resp.StatusCode, b)
+		return fmt.Errorf("updating realms profile: %s", readKeycloakError(resp))
 	}
 
 	return nil
@@ -372,7 +354,7 @@ func (k *KeycloakContainer) CreateClient(ctx context.Context, token string, ur C
 	}
 
 	if resp.StatusCode != http.StatusCreated {
-		return "", fmt.Errorf("invalid status code creating new user: %v", resp.StatusCode)
+		return "", fmt.Errorf("creating a client: %s", readKeycloakError(resp))
 	}
 	location := resp.Header.Get("Location")
 	parsedURL, err := url.Parse(location)
@@ -383,4 +365,63 @@ func (k *KeycloakContainer) CreateClient(ctx context.Context, token string, ur C
 	// created client.
 
 	return path.Base(parsedURL.Path), nil
+}
+
+// GenerateClientSecret
+// TODO: What to do about realms?
+// https://www.keycloak.org/docs-api/latest/rest-api/index.html#_post_adminrealmsrealmclientsclient_uuidclient_secret
+func (k *KeycloakContainer) GenerateClientSecret(ctx context.Context, token, clientID string) (string, error) {
+	endpoint, err := k.EndpointPath(ctx, fmt.Sprintf("/admin/realms/master/clients/%s/client-secret", clientID))
+	if err != nil {
+		return "", fmt.Errorf("getting the path for the generating the client secret: %s", err)
+	}
+
+	req, err := http.NewRequest(http.MethodPost, endpoint, nil)
+	if err != nil {
+		return "", fmt.Errorf("creating HTTP request for generating client secret: %s", err)
+	}
+	req.Header.Add("Content-Type", "application/json")
+	req.Header.Add("Accept", "application/json")
+	req.Header.Add("Authorization", "Bearer "+token)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("generating client secret: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusNoContent {
+		return "", fmt.Errorf("invalid status code generating client secret: %s", readKeycloakError(resp))
+	}
+	var credentials CredentialRepresentation
+	decoder := json.NewDecoder(resp.Body)
+
+	if err := decoder.Decode(&credentials); err != nil {
+		return "", fmt.Errorf("parsing the response from generating client secret: %s", err)
+	}
+
+	return credentials.Value, nil
+}
+
+type keycloakError struct {
+	Response   map[string]any
+	StatusCode int
+}
+
+func (e keycloakError) Error() string {
+	if msg, ok := e.Response["error"]; ok {
+		return msg.(string)
+	}
+
+	return fmt.Sprintf("unknown error: %v", e.StatusCode)
+}
+func readKeycloakError(resp *http.Response) error {
+	defer resp.Body.Close()
+	var response map[string]any
+	decoder := json.NewDecoder(resp.Body)
+
+	if err := decoder.Decode(&response); err != nil {
+		return err
+	}
+
+	return keycloakError{Response: response, StatusCode: resp.StatusCode}
 }
