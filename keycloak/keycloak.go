@@ -43,6 +43,21 @@ type CreateUserRequest struct {
 	// TODO: Extend the number of fields?
 }
 
+// CreateClientRequest provides fields for creating users.
+type CreateClientRequest struct {
+	ClientID                  string `json:"clientId"`
+	Name                      string `json:"name,omitempty"`
+	Description               string `json:"description,omitempty"`
+	Type                      string `json:"type,omitempty"`
+	Enabled                   bool   `json:"enabled"`
+	Secret                    string `json:"secret,omitempty"`
+	DirectAccessGrantsEnabled bool   `json:"directGrantsAccessEnabled"`
+	PublicClient              bool   `json:"publicClient"`
+
+	Attributes map[string][]string `json:"attributes,omitempty"`
+	// TODO: Extend the number of fields?
+}
+
 // Run creates an instance of the Keycloak container type.
 func Run(ctx context.Context, img string, opts ...testcontainers.ContainerCustomizer) (*KeycloakContainer, error) {
 	req := testcontainers.ContainerRequest{
@@ -328,4 +343,44 @@ func (k *KeycloakContainer) EnableUnmanagedAttributes(ctx context.Context, token
 	}
 
 	return nil
+}
+
+// CreateClient creates an OIDC client.
+//
+// Returns the UUID of the created client.
+func (k *KeycloakContainer) CreateClient(ctx context.Context, token string, ur CreateClientRequest) (string, error) {
+	b, err := json.Marshal(ur)
+	if err != nil {
+		return "", fmt.Errorf("marshalling the client creation to JSON: %w", err)
+	}
+
+	endpoint, err := k.EndpointPath(ctx, "/admin/realms/master/clients")
+	if err != nil {
+		return "", fmt.Errorf("getting the path for the realm clients: %s", err)
+	}
+	req, err := http.NewRequest(http.MethodPost, endpoint, bytes.NewReader(b))
+	if err != nil {
+		return "", fmt.Errorf("creating HTTP request for new client: %w", err)
+	}
+	req.Header.Add("Content-Type", "application/json")
+	req.Header.Add("Accept", "application/json")
+	req.Header.Add("Authorization", "Bearer "+token)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("creating new client: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusCreated {
+		return "", fmt.Errorf("invalid status code creating new user: %v", resp.StatusCode)
+	}
+	location := resp.Header.Get("Location")
+	parsedURL, err := url.Parse(location)
+	if err != nil {
+		return "", fmt.Errorf("invalid return location creating new client: %w", err)
+	}
+	// Returns the URL of the created Resource, the ID is the UUID of the
+	// created client.
+
+	return path.Base(parsedURL.Path), nil
 }

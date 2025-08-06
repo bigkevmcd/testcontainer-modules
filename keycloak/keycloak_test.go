@@ -172,6 +172,75 @@ func TestKeycloak(t *testing.T) {
 		_, err = keycloakContainer.GetBearerToken(ctx, "pwuser", "test-password")
 		require.NoError(t, err)
 	})
+
+	t.Run("creating an client", func(t *testing.T) {
+		type client struct {
+			ID       string `json:"id"`
+			ClientID string `json:"clientId"`
+			Name     string `json:"name"`
+		}
+
+		clientsPath, err := keycloakContainer.EndpointPath(ctx, "/admin/realms/master/clients")
+		require.NoError(t, err)
+
+		clients, err := get[[]client](ctx, token, clientsPath)
+		require.NoError(t, err)
+
+		clientIDs := func() []string {
+			var ids []string
+			for _, client := range clients {
+				ids = append(ids, client.ClientID)
+			}
+			return ids
+		}()
+		want := []string{
+			"account",
+			"account-console",
+			"admin-cli",
+			"broker",
+			"master-realm",
+			"security-admin-console",
+		}
+		assert.Equal(t, want, clientIDs)
+
+		_, err = keycloakContainer.CreateClient(ctx, token, keycloak.CreateClientRequest{
+			ClientID:                  "test-client",
+			Enabled:                   true,
+			Secret:                    "test-secret",
+			DirectAccessGrantsEnabled: true,
+			PublicClient:              true,
+		})
+		require.NoError(t, err)
+
+		logs, err := keycloakContainer.Logs(ctx)
+		require.NoError(t, err)
+		bytes, err := io.ReadAll(logs)
+		require.NoError(t, err)
+		assert.Equal(t, "", string(bytes))
+
+		clients, err = get[[]client](ctx, token, clientsPath)
+		require.NoError(t, err)
+
+		clientIDs = func() []string {
+			var ids []string
+			for _, client := range clients {
+				ids = append(ids, client.ClientID)
+			}
+			return ids
+		}()
+		want = []string{
+			"account",
+			"account-console",
+			"admin-cli",
+			"broker",
+			"master-realm",
+			"test-client",
+			"security-admin-console",
+		}
+		assert.Equal(t, want, clientIDs)
+
+	})
+
 }
 
 func TestEnableUnmanagedAttributes(t *testing.T) {
