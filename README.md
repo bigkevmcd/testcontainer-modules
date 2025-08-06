@@ -1,42 +1,19 @@
 Testcontainers for Go modules
 =============================
 
-This provides additional modules for use with ["Testcontainers for Go"](https://golang.testcontainers.org/).
+This provides a [Keycloak](https://www.keycloak.org/) container based on [Testcontainers for Go](https://golang.testcontainers.org/).
 
-## keycloak
+The source is available [here](./keycloak).
 
-```go
-import (
-	"testing"
+## Contributing
 
-	"github.com/stretchr/testify/require"
+Feel free to open issues against this repository https://github.com/bigkevmcd/testcontainer-modules
 
-	"github.com/bigkevmcd/testcontainer-modules/keycloak"
-)
+### Running the tests
 
-func TestKeycloak(t *testing.T) {
-	ctx := context.Background()
+You will require a running Docker service, alternatively testcontainers works with [Podman](https://podman-desktop.io/tutorial/testcontainers-with-podman).
 
-	keycloakContainer, err := keycloak.Run(ctx,
-		"quay.io/keycloak/keycloak:26.0.6-0",
-		keycloak.WithAdminCredentials("administrator", "secretpassword"),
-	)
-	require.NoError(t, err)
-	testcontainers.CleanupContainer(t, keycloakContainer)
-
-	token, err := keycloakContainer.GetBearerToken(ctx, "administrator", "secretpassword")
-	require.NoError(t, err)
-	require.NotEmpty(t, token)
-
-	err := keycloakContainer.CreateUser(ctx, token,
-		keycloak.CreateUserRequest{Username: "testing-user", Enabled: true})
-	require.NoError(t, err)
-
-	// This allows the use of arbitrary attributes on created users.
-	require.NoError(t, keycloakContainer.EnableUnmanagedAttributes(ctx, token))
-}
 ```
-
-This makes it easy to start a [Keycloak](https://www.keycloak.org/) server as a test container.
-
-The container is started in ["development mode"](https://www.keycloak.org/server/configuration#_starting_keycloak_in_development_mode).
+$ cd keycloak
+$ go test ./...
+```
