@@ -36,7 +36,7 @@ func TestKeycloakWithAdminCredentials(t *testing.T) {
 	require.NoError(t, err)
 
 	token, err := keycloakContainer.GetBearerToken(ctx, "administrator", "notpassword")
-	assert.ErrorContains(t, err, "invalid response status: 401")
+	assert.ErrorContains(t, err, "getting bearer token: invalid_grant")
 	assert.Empty(t, token)
 
 	token, err = keycloakContainer.GetBearerToken(ctx, "administrator", "secretpassword")
@@ -194,6 +194,52 @@ func TestEnableUnmanagedAttributes(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, "ENABLED", profile["unmanagedAttributePolicy"])
+}
+
+func TestCreateClient(t *testing.T) {
+	ctx := context.Background()
+	keycloakContainer, err := keycloak.Run(ctx,
+		testImage,
+		keycloak.WithAdminCredentials("administrator", "secretpassword"),
+	)
+	testcontainers.CleanupContainer(t, keycloakContainer)
+	require.NoError(t, err)
+
+	token, err := keycloakContainer.GetBearerToken(ctx, "administrator", "secretpassword")
+	require.NoError(t, err)
+
+	t.Run("creating a client", func(t *testing.T) {
+		clientID, err := keycloakContainer.CreateClient(ctx, token, keycloak.CreateClientRequest{
+			ClientID:                  "test-client",
+			Name:                      "Test Client",
+			Description:               "A test client for testing purposes",
+			Enabled:                   true,
+			ClientAuthenticatorType:   "client-secret",
+			RedirectUris:              []string{"http://localhost:8080/callback"},
+			WebOrigins:                []string{"http://localhost:8080"},
+			StandardFlowEnabled:       true,
+			ImplicitFlowEnabled:       false,
+			DirectAccessGrantsEnabled: true,
+			ServiceAccountsEnabled:    false,
+			PublicClient:              false,
+			Protocol:                  "openid-connect",
+			FullScopeAllowed:          true,
+		})
+		require.NoError(t, err)
+		require.NotEmpty(t, clientID)
+
+		clientPath, err := keycloakContainer.EndpointPath(ctx, fmt.Sprintf("/admin/realms/master/clients/%s", clientID))
+		require.NoError(t, err)
+
+		client, err := get[map[string]any](ctx, token, clientPath)
+		require.NoError(t, err)
+
+		assert.Equal(t, "test-client", client["clientId"])
+		assert.Equal(t, "Test Client", client["name"])
+		assert.Equal(t, "A test client for testing purposes", client["description"])
+		assert.Equal(t, true, client["enabled"])
+		assert.Equal(t, "openid-connect", client["protocol"])
+	})
 }
 
 func get[T any](ctx context.Context, token, queryURL string) (T, error) {

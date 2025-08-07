@@ -17,3 +17,31 @@ type CredentialRepresentation struct {
 	Type              string `json:"type,omitempty"`
 	Value             string `json:"value,omitempty"`
 }
+
+// CreateClientRequest provides fields for creating clients.
+// Based on Keycloak's ClientRepresentation
+type CreateClientRequest struct {
+	ClientID                  string            `json:"clientId"`
+	Name                      string            `json:"name,omitempty"`
+	Description               string            `json:"description,omitempty"`
+	Enabled                   bool              `json:"enabled"`
+	ClientAuthenticatorType   string            `json:"clientAuthenticatorType,omitempty"`
+	Secret                    string            `json:"secret,omitempty"`
+	RedirectUris              []string          `json:"redirectUris,omitempty"`
+	WebOrigins                []string          `json:"webOrigins,omitempty"`
+	NotBefore                 int32             `json:"notBefore,omitempty"`
+	BearerOnly                bool              `json:"bearerOnly"`
+	ConsentRequired           bool              `json:"consentRequired"`
+	StandardFlowEnabled       bool              `json:"standardFlowEnabled"`
+	ImplicitFlowEnabled       bool              `json:"implicitFlowEnabled"`
+	DirectAccessGrantsEnabled bool              `json:"directAccessGrantsEnabled"`
+	ServiceAccountsEnabled    bool              `json:"serviceAccountsEnabled"`
+	PublicClient              bool              `json:"publicClient"`
+	FrontchannelLogout        bool              `json:"frontchannelLogout"`
+	Protocol                  string            `json:"protocol,omitempty"`
+	Attributes                map[string]string `json:"attributes,omitempty"`
+	FullScopeAllowed          bool              `json:"fullScopeAllowed"`
+	NodeReRegistrationTimeout int32             `json:"nodeReRegistrationTimeout,omitempty"`
+	DefaultClientScopes       []string          `json:"defaultClientScopes,omitempty"`
+	OptionalClientScopes      []string          `json:"optionalClientScopes,omitempty"`
+}

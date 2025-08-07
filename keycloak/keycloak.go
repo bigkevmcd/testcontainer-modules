@@ -142,23 +142,16 @@ func (k *KeycloakContainer) GetBearerToken(ctx context.Context, username, passwo
 		return "", err
 	}
 
-	defer func() {
-		// TODO: What if this returns an error?
-		resp.Body.Close()
-	}()
-	b, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("reading response body: %w", err)
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("getting bearer token: %w", readKeycloakError(resp))
 	}
 
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("invalid response status: %v: %s", resp.StatusCode, b)
-	}
+	decoder := json.NewDecoder(resp.Body)
+	defer resp.Body.Close()
 
 	result := map[string]any{}
-	err = json.Unmarshal(b, &result)
-	if err != nil {
-		return "", err
+	if err := decoder.Decode(&result); err != nil {
+		return "", fmt.Errorf("parsing token: %w", err)
 	}
 
 	return result["access_token"].(string), nil
@@ -203,8 +196,9 @@ func (k *KeycloakContainer) CreateUser(ctx context.Context, token string, ur Cre
 	}
 
 	if resp.StatusCode != http.StatusCreated {
-		return "", fmt.Errorf("invalid status code creating new user: %v", resp.StatusCode)
+		return "", fmt.Errorf("invalid status code creating new user: %w", readKeycloakError(resp))
 	}
+
 	location := resp.Header.Get("Location")
 	parsedURL, err := url.Parse(location)
 	if err != nil {
@@ -252,14 +246,52 @@ func (k *KeycloakContainer) SetUserPassword(ctx context.Context, token, userID, 
 	}
 
 	if resp.StatusCode != http.StatusNoContent {
-		// TODO: what to do in the event of an error?!
-		b, _ := io.ReadAll(resp.Body)
-		defer resp.Body.Close()
-
-		return fmt.Errorf("invalid status code changing user password: %v: %s", resp.StatusCode, b)
+		return fmt.Errorf("setting user password: %w", readKeycloakError(resp))
 	}
 
 	return nil
+}
+
+// CreateClient creates a client in the specified realm.
+// TODO: What to do about realms?
+//
+// Returns the UUID of the created client.
+func (k *KeycloakContainer) CreateClient(ctx context.Context, token string, cr CreateClientRequest) (string, error) {
+	b, err := json.Marshal(cr)
+	if err != nil {
+		return "", fmt.Errorf("marshalling the client creation to JSON: %w", err)
+	}
+
+	endpoint, err := k.EndpointPath(ctx, "/admin/realms/master/clients")
+	if err != nil {
+		return "", fmt.Errorf("getting the path for the realm clients: %s", err)
+	}
+	req, err := http.NewRequest(http.MethodPost, endpoint, bytes.NewReader(b))
+	if err != nil {
+		return "", fmt.Errorf("creating HTTP request for new client: %w", err)
+	}
+	req.Header.Add("Content-Type", "application/json")
+	req.Header.Add("Accept", "application/json")
+	req.Header.Add("Authorization", "Bearer "+token)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("creating new client: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusCreated {
+		return "", fmt.Errorf("creating client: %w", readKeycloakError(resp))
+	}
+
+	location := resp.Header.Get("Location")
+	parsedURL, err := url.Parse(location)
+	if err != nil {
+		return "", fmt.Errorf("invalid return location creating new client: %w", err)
+	}
+	// Returns the URL of the created Resource, the ID is the UUID of the
+	// created client.
+
+	return path.Base(parsedURL.Path), nil
 }
 
 // EnableUnmanagedAttributes modifies the realm to allow unmanaged attributes.
@@ -328,4 +360,28 @@ func (k *KeycloakContainer) EnableUnmanagedAttributes(ctx context.Context, token
 	}
 
 	return nil
+}
+
+type keycloakError struct {
+	Response   map[string]any
+	StatusCode int
+}
+
+func (e keycloakError) Error() string {
+	if msg, ok := e.Response["error"]; ok {
+		return msg.(string)
+	}
+
+	return fmt.Sprintf("unknown error: %v", e.StatusCode)
+}
+func readKeycloakError(resp *http.Response) error {
+	defer resp.Body.Close()
+	var response map[string]any
+	decoder := json.NewDecoder(resp.Body)
+
+	if err := decoder.Decode(&response); err != nil {
+		return err
+	}
+
+	return keycloakError{Response: response, StatusCode: resp.StatusCode}
 }
