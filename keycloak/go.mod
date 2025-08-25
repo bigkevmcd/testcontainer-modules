@@ -3,7 +3,7 @@ module github.com/bigkevmcd/testcontainer-modules/keycloak
 go 1.23.3
 
 require (
-	github.com/stretchr/testify v1.10.0
+	github.com/stretchr/testify v1.11.0
 	github.com/testcontainers/testcontainers-go v0.38.0
 )
 
