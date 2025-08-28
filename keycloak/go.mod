@@ -2,7 +2,7 @@ module github.com/bigkevmcd/testcontainer-modules/keycloak
 
 go 1.23.3
 
-require github.com/golang-jwt/jwt/v5 v5.2.2 // indirect
+require github.com/golang-jwt/jwt/v5 v5.3.0 // indirect
 
 require (
 	github.com/Clarilab/gocloaksession v1.14.0
