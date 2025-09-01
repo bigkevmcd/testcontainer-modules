@@ -7,7 +7,7 @@ require github.com/golang-jwt/jwt/v5 v5.3.0 // indirect
 require (
 	github.com/Clarilab/gocloaksession v1.14.0
 	github.com/Nerzal/gocloak/v13 v13.9.0
-	github.com/stretchr/testify v1.11.0
+	github.com/stretchr/testify v1.11.1
 	github.com/testcontainers/testcontainers-go v0.38.0
 )
 
