@@ -400,12 +400,12 @@ func (k *KeycloakContainer) CreateClient(ctx context.Context, realmName, token s
 // GetClient gets the representation for a named client in a realm.
 //
 // realmName is the name of the realm e.g. "master"
-// clientName is the name of the client e.g. "test-client"
+// clientID is the ID of the client e.g. "test-client"
 //
 // https://www.keycloak.org/docs-api/latest/rest-api/index.html#_get_adminrealmsrealmclients
-func (k *KeycloakContainer) GetClient(ctx context.Context, realmName, token, clientName string) (repr *ClientRepresentation, clientErr error) {
+func (k *KeycloakContainer) GetClient(ctx context.Context, realmName, token, clientID string) (repr *ClientRepresentation, clientErr error) {
 	endpoint, err := k.EndpointPath(ctx, path.Join("/admin", "realms", realmName, "clients"),
-		withQueryParams(url.Values{"clientId": []string{clientName}}))
+		withQueryParams(url.Values{"clientId": []string{clientID}}))
 	if err != nil {
 		return nil, fmt.Errorf("getting the path for the generating the client UUID: %w", err)
 	}
@@ -438,7 +438,11 @@ func (k *KeycloakContainer) GetClient(ctx context.Context, realmName, token, cli
 	}
 
 	// TODO: error if more than one client?
-	return &clients[0], nil
+	if len(clients) > 0 {
+		return &clients[0], nil
+	}
+
+	return nil, fmt.Errorf("unknown client %v", clientID)
 }
 
 // GetClientSecret gets the token for accessing the API as a specific client.

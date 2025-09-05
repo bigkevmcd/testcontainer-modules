@@ -215,6 +215,25 @@ func TestKeycloak(t *testing.T) {
 		assert.Equal(t, want, clientIDs)
 	})
 
+	t.Run("getting a client", func(t *testing.T) {
+		newClient, err := keycloakContainer.GetClient(ctx, "testing", adminToken, "unknown-client")
+		assert.ErrorContains(t, err, "unknown client")
+		assert.Empty(t, newClient)
+
+		err = keycloakContainer.CreateClient(ctx, "testing",
+			adminToken, keycloak.ClientRepresentation{
+				ClientID:                  "named-client",
+				Enabled:                   true,
+				Protocol:                  "openid-connect",
+				DirectAccessGrantsEnabled: true,
+			})
+		require.NoError(t, err)
+		newClient, err = keycloakContainer.GetClient(ctx, "testing", adminToken, "named-client")
+		assert.NoError(t, err)
+		assert.NotEmpty(t, newClient)
+		assert.Equal(t, "named-client", newClient.ClientID)
+	})
+
 	t.Run("adding a role to a newly created client", func(t *testing.T) {
 		err := keycloakContainer.CreateClient(ctx, "testing",
 			adminToken, keycloak.ClientRepresentation{
