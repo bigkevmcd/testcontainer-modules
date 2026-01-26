@@ -1,7 +1,6 @@
 package keycloak
 
 // CredentialRepresentation represents credentials for a user or client
-// TODO: Custom unmarshal timestamps from Keycloak!
 //
 // Converted from https://www.keycloak.org/docs-api/latest/rest-api/index.html#CredentialRepresentation
 type CredentialRepresentation struct {
@@ -65,6 +64,4 @@ type ClientRepresentation struct {
 	Access                    map[string]any    `json:"access,omitempty"`
 	Attributes                map[string]string `json:"attributes,omitempty"`
 	Protocol                  string            `json:"protocol,omitempty"`
-
-	// TODO: Extend the number of fields?
 }
