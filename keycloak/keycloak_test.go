@@ -28,7 +28,7 @@ var testImage = func() string {
 }()
 
 func TestKeycloakWithAdminCredentials(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	keycloakContainer, err := keycloak.Run(ctx,
 		testImage,
@@ -47,7 +47,7 @@ func TestKeycloakWithAdminCredentials(t *testing.T) {
 }
 
 func TestKeycloakWithImportRealm(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	absPath, err := filepath.Abs(filepath.Join("testdata", "master-realm.json"))
 	require.NoError(t, err)
@@ -76,7 +76,7 @@ func TestKeycloakWithImportRealm(t *testing.T) {
 }
 
 func TestKeycloak(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	keycloakContainer, err := keycloak.Run(ctx,
 		testImage,
 		keycloak.WithAdminCredentials("administrator", "secretpassword"),
@@ -288,7 +288,7 @@ func TestKeycloak(t *testing.T) {
 }
 
 func TestEnableUnmanagedAttributes(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	keycloakContainer, err := keycloak.Run(ctx,
 		testImage,
 		keycloak.WithAdminCredentials("administrator", "secretpassword"),
