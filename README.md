@@ -1,9 +1,9 @@
 Testcontainers for Go modules
 =============================
 
-This provides a [Keycloak](https://www.keycloak.org/) container based on [Testcontainers for Go](https://golang.testcontainers.org/).
+This provides [Keycloak](https://www.keycloak.org/) and [Dex](https://dexidp.io/) containers based on [Testcontainers for Go](https://golang.testcontainers.org/).
 
-The source is available [here](./keycloak).
+The source is available in the [Keycloak](./keycloak) and [Dex](./dex) modules.
 
 ## Contributing
 

@@ -78,3 +78,34 @@ func TestWithImportRealm(t *testing.T) {
 		})
 	}
 }
+
+func TestKeycloakErrorError(t *testing.T) {
+	tests := []struct {
+		name     string
+		response map[string]any
+		want     string
+	}{
+		{
+			name:     "error message",
+			response: map[string]any{"error": "invalid_grant"},
+			want:     "invalid_grant",
+		},
+		{
+			name:     "fallback error message",
+			response: map[string]any{"error": 42, "errorMessage": "invalid request"},
+			want:     "invalid request",
+		},
+		{
+			name:     "unknown error",
+			response: map[string]any{"error": false},
+			want:     "unknown error: 400",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := KeycloakError{Response: tt.response, StatusCode: 400}
+			require.Equal(t, tt.want, err.Error())
+		})
+	}
+}

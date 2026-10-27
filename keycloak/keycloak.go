@@ -457,7 +457,7 @@ func (k *KeycloakContainer) GetClient(ctx context.Context, realmName, token, cli
 	}
 
 	if len(clients) == 0 {
-		return nil, fmt.Errorf("no client found with name %q", clientName)
+		return nil, fmt.Errorf("unknown client %q", clientID)
 	}
 
 	if len(clients) > 0 {
@@ -718,12 +718,12 @@ type KeycloakError struct {
 }
 
 func (e KeycloakError) Error() string {
-	if msg, ok := e.Response["error"]; ok {
-		return msg.(string)
+	if msg, ok := e.Response["error"].(string); ok {
+		return msg
 	}
 
-	if msg, ok := e.Response["errorMessage"]; ok {
-		return msg.(string)
+	if msg, ok := e.Response["errorMessage"].(string); ok {
+		return msg
 	}
 
 	return fmt.Sprintf("unknown error: %v", e.StatusCode)

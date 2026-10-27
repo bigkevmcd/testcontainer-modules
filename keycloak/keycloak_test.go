@@ -266,7 +266,7 @@ func TestKeycloak(t *testing.T) {
 
 		// Before adding permissions querying for users should get a 403.
 		realmUsers, err := session.GetGoCloakInstance().GetUsers(ctx, clientAuthToken.AccessToken, "testing", gocloak.GetUsersParams{
-			Enabled: gocloak.BoolP(true),
+			Enabled: new(true),
 		})
 
 		require.ErrorContains(t, err, "Forbidden")
@@ -280,7 +280,7 @@ func TestKeycloak(t *testing.T) {
 		require.NoError(t, err)
 
 		realmUsers, err = session.GetGoCloakInstance().GetUsers(ctx, clientAuthToken.AccessToken, "testing", gocloak.GetUsersParams{
-			Enabled: gocloak.BoolP(true),
+			Enabled: new(true),
 		})
 		require.NoError(t, err)
 		assert.Len(t, realmUsers, 1)
