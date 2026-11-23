@@ -42,3 +42,23 @@ func Run(ctx context.Context, img string, opts ...testcontainers.ContainerCustom
 
 	return &DexContainer{Container: container}, nil
 }
+
+const defaultConfigPath = "/etc/dex/config.docker.yaml"
+
+// WithConfig copies the Dex configuration file at configFile into the
+// container, where the image's default command will read it.
+func WithConfig(configFile string) testcontainers.CustomizeRequestOption {
+	return func(req *testcontainers.GenericContainerRequest) error {
+		if configFile == "" {
+			return fmt.Errorf("WithConfig: configFile path cannot be empty")
+		}
+
+		req.Files = append(req.Files, testcontainers.ContainerFile{
+			HostFilePath:      configFile,
+			ContainerFilePath: defaultConfigPath,
+			FileMode:          0o644,
+		})
+
+		return nil
+	}
+}

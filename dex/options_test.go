@@ -1,71 +1,27 @@
 package dex
 
-// func TestWithAdminCredentials(t *testing.T) {
-// 	type credentials struct {
-// 		name     string
-// 		password string
-// 	}
+import (
+	"testing"
 
-// 	tests := map[string]struct {
-// 		creds       credentials
-// 		expectedEnv map[string]string
-// 	}{
-// 		"username and password": {
-// 			creds: credentials{
-// 				name:     "admin",
-// 				password: "testingpassword",
-// 			},
-// 			expectedEnv: map[string]string{
-// 				"KC_BOOTSTRAP_ADMIN_USERNAME": "admin",
-// 				"KC_BOOTSTRAP_ADMIN_PASSWORD": "testingpassword",
-// 			},
-// 		},
-// 	}
+	"github.com/stretchr/testify/require"
+	"github.com/testcontainers/testcontainers-go"
+)
 
-// 	for k, tt := range tests {
-// 		t.Run(k, func(t *testing.T) {
-// 			req := &testcontainers.GenericContainerRequest{
-// 				ContainerRequest: testcontainers.ContainerRequest{},
-// 			}
+func TestWithConfig(t *testing.T) {
+	req := &testcontainers.GenericContainerRequest{}
 
-// 			err := WithAdminCredentials(tt.creds.name, tt.creds.password)(req)
-// 			require.NoError(t, err)
+	require.NoError(t, WithConfig("testdata/config.yaml")(req))
 
-// 			require.Equal(t, tt.expectedEnv, req.Env)
-// 		})
-// 	}
-// }
+	require.Equal(t, []testcontainers.ContainerFile{{
+		HostFilePath:      "testdata/config.yaml",
+		ContainerFilePath: defaultConfigPath,
+		FileMode:          0o644,
+	}}, req.Files)
+}
 
-// func TestWithImportRealm(t *testing.T) {
-// 	tests := map[string]struct {
-// 		filename    string
-// 		expectedReq testcontainers.ContainerRequest
-// 	}{
-// 		"simple path to file": {
-// 			filename: "testdata/my-test-file",
-// 			expectedReq: testcontainers.ContainerRequest{
-// 				Cmd: []string{defaultCmd, importRealmCmd},
-// 				Files: []testcontainers.ContainerFile{
-// 					testcontainers.ContainerFile{
-// 						HostFilePath:      "testdata/my-test-file",
-// 						ContainerFilePath: filepath.Join(defaultImportPath, "my-test-file"),
-// 						FileMode:          0o755,
-// 					},
-// 				},
-// 			},
-// 		},
-// 	}
+func TestWithConfigEmptyPath(t *testing.T) {
+	req := &testcontainers.GenericContainerRequest{}
 
-// 	for k, tt := range tests {
-// 		t.Run(k, func(t *testing.T) {
-// 			req := &testcontainers.GenericContainerRequest{
-// 				ContainerRequest: testcontainers.ContainerRequest{},
-// 			}
-
-// 			err := WithImportRealm(tt.filename)(req)
-// 			require.NoError(t, err)
-
-// 			require.Equal(t, tt.expectedReq, req.ContainerRequest)
-// 		})
-// 	}
-// }
+	require.ErrorContains(t, WithConfig("")(req), "cannot be empty")
+	require.Empty(t, req.Files)
+}

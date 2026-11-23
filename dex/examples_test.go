@@ -14,7 +14,7 @@ func ExampleRun() {
 
 	dexContainer, err := dex.Run(ctx,
 		testImage,
-		withDexTestConfig(),
+		dex.WithConfig("testdata/config.yaml"),
 	)
 	defer func() {
 		if err := testcontainers.TerminateContainer(dexContainer); err != nil {
